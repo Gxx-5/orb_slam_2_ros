@@ -20,6 +20,7 @@
 
        <!-- static parameters -->
        <param name="load_map" type="bool" value="false" />
+       <param name="bUseViewer" type="bool" value="true" />
        <param name="map_file" type="string" value="map.bin" />
        <param name="settings_file" type="string" value="$(find orb_slam2_ros)/orb_slam2/config/mono.yaml" />
        <param name="voc_file" type="string" value="$(find orb_slam2_ros)/orb_slam2/Vocabulary/ORBvoc.txt" />

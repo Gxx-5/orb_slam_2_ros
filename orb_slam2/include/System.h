@@ -30,14 +30,17 @@
 
 #include "Tracking.h"
 #include "FrameDrawer.h"
+#include "MapDrawer.h"
 #include "Map.h"
 #include "LocalMapping.h"
 #include "LoopClosing.h"
 #include "KeyFrameDatabase.h"
 #include "ORBVocabulary.h"
+#include "Viewer.h"
 #include <map>
 namespace ORB_SLAM2
 {
+class Viewer;
 class FrameDrawer;
 class Map;
 class Tracking;
@@ -65,7 +68,7 @@ public:
 
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
     System(const string strVocFile, const string strSettingsFile, const eSensor sensor,
-           const std::string & map_file = "", bool load_map = false); // map serialization addition
+           const std::string & map_file = "", bool load_map = false, const bool bUseViewer = false); // map serialization addition
 
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
@@ -82,6 +85,12 @@ public:
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     void TrackMonocular(const cv::Mat &im, const double &timestamp);
+
+    // This stops local mapping thread (map building) and performs only camera tracking.
+    void ActivateLocalizationMode();
+
+    // This resumes local mapping thread and performs SLAM again.
+    void DeactivateLocalizationMode();
 
     // Returns true if there have been a big map change (loop closure, global BA)
     // since last call to this function
@@ -145,12 +154,6 @@ private:
 
     rlim_t GetCurrentCallStackSize ();
 
-    // This stops local mapping thread (map building) and performs only camera tracking.
-    void ActivateLocalizationMode();
-
-    // This resumes local mapping thread and performs SLAM again.
-    void DeactivateLocalizationMode();
-
     bool LoadMap(const string &filename);
 
     bool currently_localizing_only_;
@@ -183,13 +186,17 @@ private:
     // a pose graph optimization and full bundle adjustment (in a new thread) afterwards.
     LoopClosing* mpLoopCloser;
 
+    // The viewer draws the map and the current camera pose. It uses Pangolin.
+    Viewer* mpViewer;
     FrameDrawer* mpFrameDrawer;
+    MapDrawer* mpMapDrawer;
 
     // System threads: Local Mapping, Loop Closing, Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.
     std::thread* mptLocalMapping;
     std::thread* mptLoopClosing;
-
+    std::thread* mptViewer;
+    
     // Reset flag
     std::mutex mMutexReset;
     bool mbReset;

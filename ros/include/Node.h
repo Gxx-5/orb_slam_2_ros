@@ -85,7 +85,7 @@ vector<float> TransformFromMat (cv::Mat position_mat,bool vec);
 
     ros::ServiceServer service_server_;
 
-
+    bool bUseViewer_;
     bool load_map_param_;
     bool publish_pointcloud_param_;
     bool publish_pose_param_;
