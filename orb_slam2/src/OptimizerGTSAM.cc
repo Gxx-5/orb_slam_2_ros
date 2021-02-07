@@ -28,9 +28,6 @@
 #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
-
-
-
 #include<Eigen/StdVector>
 
 #include "Converter.h"
@@ -371,10 +368,10 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
     const float chi2Mono[4]={5.991,5.991,5.991,5.991};
     const float chi2Stereo[4]={7.815,7.815,7.815, 7.815};
-    const int its[4]={10,1,1,1};    
+    const int its[4]={10,10,10,10};    
 //优化执行部分
     int nBad=0;
-    for(size_t it=0; it<3; it++)
+    for(size_t it=0; it<4; it++)
     {
 
         vSE3->setEstimate(Converter::toSE3Quat(pFrame->mTcw));//设置初始
@@ -660,7 +657,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
             return;
 
     optimizer.initializeOptimization();
-    optimizer.optimize(3);
+    optimizer.optimize(5);
 
     bool bDoMore= true;
 

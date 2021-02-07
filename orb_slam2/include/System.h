@@ -22,12 +22,11 @@
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
-#include <string>
-#include <thread>
+#include<string>
+#include<thread>
 #include <unistd.h>
-#include <opencv2/core/core.hpp>
+#include<opencv2/core/core.hpp>
 #include <sys/resource.h>
-
 
 #include "Tracking.h"
 #include "FrameDrawer.h"
@@ -36,7 +35,7 @@
 #include "LoopClosing.h"
 #include "KeyFrameDatabase.h"
 #include "ORBVocabulary.h"
-
+#include <map>
 namespace ORB_SLAM2
 {
 class FrameDrawer;
@@ -44,8 +43,6 @@ class Map;
 class Tracking;
 class LocalMapping;
 class LoopClosing;
-
-struct ORBParameters;
 
 class System
 {
@@ -59,11 +56,18 @@ public:
 
 public:
 
+	Map* getMap() {
+		return mpMap;
+	}
+	Tracking* getTracker(){ return mpTracker; }
+	LocalMapping* getLocalMapping(){ return mpLocalMapper; }
+	LoopClosing* getLoopClosing(){ return mpLoopCloser; }
+
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
-    System(const string strVocFile, const eSensor sensor, ORBParameters& parameters,
+    System(const string strVocFile, const string strSettingsFile, const eSensor sensor,
            const std::string & map_file = "", bool load_map = false); // map serialization addition
 
-    // Process the given stereo frame. Images must be synchronized and rectified.
+    // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     void TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp);
@@ -74,7 +78,7 @@ public:
     // Returns the camera pose (empty if tracking fails).
     void TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp);
 
-    // Process the given monocular frame
+    // Proccess the given monocular frame
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     void TrackMonocular(const cv::Mat &im, const double &timestamp);
@@ -119,9 +123,9 @@ public:
     void SetMinimumKeyFrames (int min_num_kf);
 
     bool SaveMap(const string &filename);
-
+    
     cv::Mat GetCurrentPosition ();
-
+    vector<vector<float>>  GetPoseGraph();
     // Information from most recent processed frame
     // You can call this right after TrackMonocular (or stereo or RGBD)
     int GetTrackingState();
@@ -131,7 +135,11 @@ public:
     cv::Mat DrawCurrentFrame ();
 
     std::vector<MapPoint*> GetAllMapPoints();
-
+    void  GetPoseGraph(map<int,KeyFrame*> &KfNode,map<int,vector<KeyFrame*>> &PoseGraph);
+    int getTrackingState()
+    {
+        return mTrackingState;
+    }
 private:
     bool SetCallStackSize (const rlim_t kNewStackSize);
 
@@ -199,7 +207,6 @@ private:
 
     // Current position
     cv::Mat current_position_;
-
 };
 
 }// namespace ORB_SLAM

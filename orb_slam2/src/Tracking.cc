@@ -43,65 +43,78 @@ using namespace std;
 namespace ORB_SLAM2
 {
 
-Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
-        Map *pMap, KeyFrameDatabase* pKFDB, const int sensor, ORBParameters& parameters):
+Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, Map *pMap, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor):
     mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(false), mbVO(false), mpORBVocabulary(pVoc),
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys),
-    mpFrameDrawer(pFrameDrawer), mpMap(pMap), mnLastRelocFrameId(0), mnMinimumKeyFrames(5)
+    mpFrameDrawer(pFrameDrawer), mpMap(pMap), mnLastRelocFrameId(0), mnMinimumKeyFrames(5),loop_detected(0)
 {
-    //Unpack all the parameters from the parameters struct (this replaces loading in a second configuration file)
-    mMaxFrames = parameters.maxFrames;
-    mbRGB = parameters.RGB;
-    mThDepth = parameters.thDepth;
-    nFeatures = parameters.nFeatures;
-    fScaleFactor = parameters.scaleFactor;
-    nLevels = parameters.nLevels;
-    fIniThFAST = parameters.iniThFAST;
-    fMinThFAST = parameters.minThFAST;
-    mDepthMapFactor = parameters.depthMapFactor;
+    // Load camera parameters from settings file
+
+    cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
+    float fx = fSettings["Camera.fx"];
+    float fy = fSettings["Camera.fy"];
+    float cx = fSettings["Camera.cx"];
+    float cy = fSettings["Camera.cy"];
 
     cv::Mat K = cv::Mat::eye(3,3,CV_32F);
-    K.at<float>(0,0) = parameters.fx;
-    K.at<float>(1,1) = parameters.fy;
-    K.at<float>(0,2) = parameters.cx;
-    K.at<float>(1,2) = parameters.cy;
+    K.at<float>(0,0) = fx;
+    K.at<float>(1,1) = fy;
+    K.at<float>(0,2) = cx;
+    K.at<float>(1,2) = cy;
     K.copyTo(mK);
 
     cv::Mat DistCoef(4,1,CV_32F);
-    DistCoef.at<float>(0) = parameters.k1;
-    DistCoef.at<float>(1) = parameters.k2;
-    DistCoef.at<float>(2) = parameters.p1;
-    DistCoef.at<float>(3) = parameters.p2;
-    if(parameters.k3!=0)
+    DistCoef.at<float>(0) = fSettings["Camera.k1"];
+    DistCoef.at<float>(1) = fSettings["Camera.k2"];
+    DistCoef.at<float>(2) = fSettings["Camera.p1"];
+    DistCoef.at<float>(3) = fSettings["Camera.p2"];
+    const float k3 = fSettings["Camera.k3"];
+    if(k3!=0)
     {
         DistCoef.resize(5);
-        DistCoef.at<float>(4) = parameters.k3;
+        DistCoef.at<float>(4) = k3;
     }
     DistCoef.copyTo(mDistCoef);
 
-    mbf = parameters.baseline;
+    mbf = fSettings["Camera.bf"];
+   
+    float fps = fSettings["Camera.fps"];
+    if(fps==0)
+        fps=30;
 
-    // Max/Min Frames to insert keyframes and to check relocalization
+    // Max/Min Frames to insert keyframes and to check relocalisation
     mMinFrames = 0;
+    mMaxFrames = fps;
 
     cout << endl << "Camera Parameters: " << endl;
-    cout << "- fx: " << parameters.fx << endl;
-    cout << "- fy: " << parameters.fy << endl;
-    cout << "- cx: " << parameters.cx << endl;
-    cout << "- cy: " << parameters.cy << endl;
+    cout << "- fx: " << fx << endl;
+    cout << "- fy: " << fy << endl;
+    cout << "- cx: " << cx << endl;
+    cout << "- cy: " << cy << endl;
     cout << "- k1: " << DistCoef.at<float>(0) << endl;
     cout << "- k2: " << DistCoef.at<float>(1) << endl;
     if(DistCoef.rows==5)
         cout << "- k3: " << DistCoef.at<float>(4) << endl;
     cout << "- p1: " << DistCoef.at<float>(2) << endl;
     cout << "- p2: " << DistCoef.at<float>(3) << endl;
-    cout << "- fps: " << mMaxFrames << endl;
-    cout << "- bf: " << mbf << endl;
+    cout << "- fps: " << fps << endl;
+
+
+    int nRGB = fSettings["Camera.RGB"];
+    mbRGB = nRGB;
 
     if(mbRGB)
         cout << "- color order: RGB (ignored if grayscale)" << endl;
     else
         cout << "- color order: BGR (ignored if grayscale)" << endl;
+
+    // Load ORB parameters
+
+    int nFeatures = fSettings["ORBextractor.nFeatures"];
+    float fScaleFactor = fSettings["ORBextractor.scaleFactor"];
+    int nLevels = fSettings["ORBextractor.nLevels"];
+    int fIniThFAST = fSettings["ORBextractor.iniThFAST"];
+    int fMinThFAST = fSettings["ORBextractor.minThFAST"];
 
     mpORBextractorLeft = new ORBextractor(nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
 
@@ -120,18 +133,19 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 
     if(sensor==System::STEREO || sensor==System::RGBD)
     {
-        mThDepth = mbf*(float)mThDepth/parameters.fx;
+        mThDepth = mbf*(float)fSettings["ThDepth"]/fx;
         cout << endl << "Depth Threshold (Close/Far Points): " << mThDepth << endl;
     }
 
     if(sensor==System::RGBD)
     {
+        mDepthMapFactor = fSettings["DepthMapFactor"];
         if(fabs(mDepthMapFactor)<1e-5)
             mDepthMapFactor=1;
         else
             mDepthMapFactor = 1.0f/mDepthMapFactor;
     }
-
+ optim_num= fSettings["optim_num"];
 }
 
 void Tracking::SetLocalMapper(LocalMapping *pLocalMapper)
@@ -753,7 +767,7 @@ bool Tracking::TrackReferenceKeyFrame()
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
-    Optimizer::PoseOptimization(&mCurrentFrame);
+    Optimizer::PoseOptimization(&mCurrentFrame);//调用
 
     // Discard outliers
     int nmatchesMap = 0;
@@ -982,6 +996,7 @@ bool Tracking::NeedNewKeyFrame()
     // Check how many "close" points are being tracked and how many could be potentially created.
     int nNonTrackedClose = 0;
     int nTrackedClose= 0;
+    mCurrentFrame.is_keyframe = true;
     if(mSensor!=System::MONOCULAR)
     {
         for(int i =0; i<mCurrentFrame.N; i++)
@@ -1182,7 +1197,10 @@ void Tracking::UpdateLocalMap()
     UpdateLocalKeyFrames();
     UpdateLocalPoints();
 }
-
+bool sortbydown(const pair<KeyFrame*,int> & p1,const pair<KeyFrame*,int> & p2)
+{
+    return p1.second>p2.second;
+}
 void Tracking::UpdateLocalPoints()
 {
     mvpLocalMapPoints.clear();
@@ -1204,7 +1222,9 @@ void Tracking::UpdateLocalPoints()
                 mvpLocalMapPoints.push_back(pMP);
                 pMP->mnTrackReferenceForFrame=mCurrentFrame.mnId;
             }
+            if(mvpLocalMapPoints.size()>optim_num)  {break;}
         }
+        if(mvpLocalMapPoints.size()>optim_num){break;}
     }
 }
 
@@ -1239,9 +1259,9 @@ void Tracking::UpdateLocalKeyFrames()
 
     mvpLocalKeyFrames.clear();
     mvpLocalKeyFrames.reserve(3*keyframeCounter.size());
-
+/////////////增加帧排序/////////////
     // All keyframes that observe a map point are included in the local map. Also check which keyframe shares most points
-    for(map<KeyFrame*,int>::const_iterator it=keyframeCounter.begin(), itEnd=keyframeCounter.end(); it!=itEnd; it++)
+    for(map<KeyFrame*,int>::const_iterator it=keyframeCounter.begin(), itEnd=keyframeCounter.end(); it!=itEnd; it++)///排序修改位点
     {
         KeyFrame* pKF = it->first;
 
@@ -1257,8 +1277,17 @@ void Tracking::UpdateLocalKeyFrames()
         mvpLocalKeyFrames.push_back(it->first);
         pKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
     }
-
-
+vector< pair<KeyFrame*,int> > t_vec;
+for(map<KeyFrame*,int>::iterator iter = keyframeCounter.begin();iter != keyframeCounter.end(); iter ++)
+{
+	t_vec.push_back(make_pair(iter->first,iter->second));
+}
+sort(t_vec.begin(),t_vec.end(),ORB_SLAM2::sortbydown);
+for(vector<pair<KeyFrame*,int>>::iterator it=t_vec.begin(), itEnd=t_vec.end(); it!=itEnd; it++)
+{
+    mvpLocalKeyFrames.push_back(it->first);
+}
+/////////////增加帧排序/////////////
     // Include also some not-already-included keyframes that are neighbors to already-included keyframes
     for(vector<KeyFrame*>::const_iterator itKF=mvpLocalKeyFrames.begin(), itEndKF=mvpLocalKeyFrames.end(); itKF!=itEndKF; itKF++)
     {

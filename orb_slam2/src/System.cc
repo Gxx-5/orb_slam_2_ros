@@ -22,13 +22,15 @@
 
 #include "System.h"
 #include "Converter.h"
+#include "KeyFrame.h"
 #include <thread>
+#include<map>
 #include <iomanip>
-
+using namespace std;
 namespace ORB_SLAM2
 {
 
-System::System(const string strVocFile, const eSensor sensor, ORBParameters& parameters,
+System::System(const string strVocFile, const string strSettingsFile, const eSensor sensor,
                const std::string & map_file, bool load_map): // map serialization addition
                mSensor(sensor), mbReset(false),mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false),
                map_file(map_file), load_map(load_map)
@@ -40,11 +42,6 @@ System::System(const string strVocFile, const eSensor sensor, ORBParameters& par
     "This is free software, and you are welcome to redistribute it" << endl <<
     "under certain conditions. See LICENSE.txt." << endl << endl;
 
-    cout << "OpenCV version : " << CV_VERSION << endl;
-    cout << "Major version : " << CV_MAJOR_VERSION << endl;
-    cout << "Minor version : " << CV_MINOR_VERSION << endl;
-    cout << "Subminor version : " << CV_SUBMINOR_VERSION << endl;
-
     cout << "Input sensor was set to: ";
 
     if(mSensor==MONOCULAR)
@@ -53,6 +50,15 @@ System::System(const string strVocFile, const eSensor sensor, ORBParameters& par
         cout << "Stereo" << endl;
     else if(mSensor==RGBD)
         cout << "RGB-D" << endl;
+
+    //Check settings file
+    cv::FileStorage fsSettings(strSettingsFile.c_str(), cv::FileStorage::READ);
+    if(!fsSettings.isOpened())
+    {
+       cerr << "Failed to open settings file at: " << strSettingsFile << endl;
+       exit(-1);
+    }
+
 
     //Load ORB Vocabulary
     cout << endl << "Loading ORB Vocabulary." << endl;
@@ -99,7 +105,7 @@ System::System(const string strVocFile, const eSensor sensor, ORBParameters& par
     //Initialize the Tracking thread
     //(it will live in the main thread of execution, the one that called this constructor)
     mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer,
-                             mpMap, mpKeyFrameDatabase, mSensor, parameters);
+                             mpMap, mpKeyFrameDatabase, strSettingsFile, mSensor);
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(mpMap, mSensor==MONOCULAR);
@@ -180,7 +186,7 @@ void System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double 
         cerr << "ERROR: you called TrackRGBD but input sensor was not set to RGBD." << endl;
         exit(-1);
     }
-
+    // std::cout<<"testtt"<<endl;
     // Check mode change
     {
         unique_lock<mutex> lock(mMutexMode);
@@ -306,6 +312,78 @@ void System::Shutdown()
         std::this_thread::sleep_for(std::chrono::microseconds(5000));
     }
 }
+
+vector<vector<float>>  System::GetPoseGraph()
+{
+    
+
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+   // std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
+    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+
+    vector<vector<float>>PoseList;
+    // vector<vector<int>> PoseGraph;
+    for(size_t i=0; i<vpKFs.size(); i++)
+    {
+        KeyFrame* pKF = vpKFs[i];
+
+        if(pKF->isBad())
+            continue;
+
+        cv::Mat R = pKF->GetRotation().t();
+        vector<float> q = Converter::toQuaternion(R);
+        cv::Mat t = pKF->GetCameraCenter();
+
+        vector<float> Pose = {t.at<float>(0)  , t.at<float>(1), t.at<float>(2),q[0] , q[1] ,q[2] , q[3]};
+        //cout<<"pose"<<i<<"="<<t.at<float>(0) <<"," <<t.at<float>(1)<<","<< t.at<float>(2)<<","<<q[0] <<"," <<q[1] <<","<<q[2] <<","<< q[3]<<endl;
+        //cout<<"pose"<<i<<"mnid="<<pKF->nNextId<<","<<t.at<float>(0) <<"," <<t.at<float>(1)<<","<< t.at<float>(2)<<","<<q[0] <<"," <<q[1] <<","<<q[2] <<","<< q[3]<<endl;
+        PoseList.push_back(Pose);
+    }
+
+
+    return PoseList;
+}
+
+
+void  System::GetPoseGraph(std::map<int,KeyFrame*> &KfNode,std::map<int,vector<KeyFrame*>> &PoseGraph) //mnid,neiborKF
+{
+
+    vector<KeyFrame*> vpKFs = mpMap->GetAllKeyFrames();
+   // std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
+    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+    
+    for(size_t i=0; i<vpKFs.size(); i++)
+    {
+        KeyFrame* pKF = vpKFs[i];
+        
+        if(pKF->isBad())
+            continue;
+        KfNode[pKF->mnId]=pKF;
+        vector<KeyFrame*> KF_raw=pKF->GetVectorCovisibleKeyFrames();
+        vector<KeyFrame*> KF_filter;
+       for(size_t j=0;j<KF_raw.size();j++)//过滤坏值
+       {
+           KeyFrame* nKF = KF_raw[j];
+           if(nKF->isBad())
+            continue;
+            KF_filter.push_back(nKF);
+       } 
+
+        PoseGraph[pKF->mnId]=KF_filter;
+        // cv::Mat R = pKF->GetRotation().t();
+        // vector<float> q = Converter::toQuaternion(R);
+        // cv::Mat t = pKF->GetCameraCenter();
+
+        // vector<float> Pose = {t.at<float>(0)  , t.at<float>(1), t.at<float>(2),q[0] , q[1] ,q[2] , q[3]};
+        // //cout<<"pose"<<pKF->mnId<<"="<<t.at<float>(0) <<"," <<t.at<float>(1)<<","<< t.at<float>(2)<<","<<q[0] <<"," <<q[1] <<","<<q[2] <<","<< q[3]<<endl;
+        // PoseList.push_back(Pose);
+        
+    }
+
+
+}
+
+
 
 void System::SaveTrajectoryTUM(const string &filename)
 {

@@ -38,7 +38,7 @@ namespace ORB_SLAM2
 LoopClosing::LoopClosing(Map *pMap, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
     mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), mbFinishedGBA(true),
-    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(false)
+    mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(false),loop_detected(false)
 {
     mnCovisibilityConsistencyTh = 3;
 }
@@ -647,7 +647,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
     cout << "Starting Global Bundle Adjustment" << endl;
 
     bool idx =  mnFullBAIdx;
-    Optimizer::GlobalBundleAdjustemnt(mpMap,10,&mbStopGBA,nLoopKF,false);
+    Optimizer::GlobalBundleAdjustemnt(mpMap,0,&mbStopGBA,nLoopKF,false);
 
     // Update all MapPoints and KeyFrames
     // Local Mapping was active during BA, that means that there might be new keyframes
@@ -746,6 +746,7 @@ void LoopClosing::RunGlobalBundleAdjustment(unsigned long nLoopKF)
         mbFinishedGBA = true;
         mbRunningGBA = false;
     }
+    loop_detected = mpTracker->loop_detected = true;
 }
 
 void LoopClosing::RequestFinish()

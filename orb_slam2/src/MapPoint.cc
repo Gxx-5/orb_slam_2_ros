@@ -34,7 +34,7 @@ MapPoint::MapPoint(const cv::Mat &Pos, KeyFrame *pRefKF, Map* pMap):
     mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
     mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
     mpReplaced(static_cast<MapPoint*>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap)
-{
+{//关键帧地图点构造函数
     Pos.copyTo(mWorldPos);
     mNormalVector = cv::Mat::zeros(3,1,CV_32F);
 
@@ -48,7 +48,7 @@ MapPoint::MapPoint(const cv::Mat &Pos, Map* pMap, Frame* pFrame, const int &idxF
     mnBALocalForKF(0), mnFuseCandidateForKF(0),mnLoopPointForKF(0), mnCorrectedByKF(0),
     mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame*>(NULL)), mnVisible(1),
     mnFound(1), mbBad(false), mpReplaced(NULL), mpMap(pMap)
-{
+{//非关键帧地图点构造函数
     Pos.copyTo(mWorldPos);
     cv::Mat Ow = pFrame->GetCameraCenter();
     mNormalVector = mWorldPos - Ow;
